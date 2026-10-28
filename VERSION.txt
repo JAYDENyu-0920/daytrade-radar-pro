@@ -1,1 +1,1 @@
-V0.2.3 iOS 黑畫面診斷修正版；非即時行情。
+V0.2.4 — Safari window.top naming conflict fix
