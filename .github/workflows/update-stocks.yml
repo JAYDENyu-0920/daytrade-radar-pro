@@ -32,8 +32,9 @@ jobs:
           python-version: '3.12'
 
       - name: 擷取官方行情
+        env:
+          RADAR_TEST_DATE: ${{ inputs.test_date }}
         run: python update_data.py
-
       - name: 提交行情資料
         run: |
           git config user.name "github-actions[bot]"
