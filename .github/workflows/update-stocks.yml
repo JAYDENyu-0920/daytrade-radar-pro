@@ -1,0 +1,40 @@
+
+name: 更新台股行情
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '45 7 * * 1-5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-stocks
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 取得專案
+        uses: actions/checkout@v4
+
+      - name: 安裝 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 擷取官方行情
+        run: python update_data.py
+
+      - name: 提交行情資料
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/stocks.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update market snapshot"
+            git push
+          fi
