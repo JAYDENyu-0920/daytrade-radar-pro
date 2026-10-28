@@ -1,10 +1,12 @@
-當沖雷達 Pro V0.5.2.1 測試版
+當沖雷達 Pro V0.5.3 — 七類券商分點監控測試版
+
 1. 備份 GitHub 專案。
-2. 將 index.html、app.js、sw.js 上傳到專案根目錄覆蓋同名檔案。
-3. 不要刪除 update_data.py、data/stocks.json、.github/workflows/update-stocks.yml、manifest.webmanifest。
-4. GitHub Pages 部署完成後，重新整理 Safari。
-5. 在盤中頁面填入自己的 Fugle API Key，輸入 1～5 檔股票，點選「查詢 / 啟動更新」。
-6. 查看報價時間是否顯示台灣年月日時分秒；觀察倒數 60 秒，待自動查詢後上次查詢時間是否變動。
-7. 盤後查詢會取得最後可用報價，不代表交易正在進行。自動查詢只在盤中頁面可見時執行。
-8. API Key 不會儲存在 GitHub 或 localStorage；不要分享完整金鑰。
-9. 免費 API 可能有頻率限制，且盤後資料的擷取日尚非驗證交易日；評分及當沖資格需持續校驗。
+2. 將 ZIP 內 index.html、app.js、sw.js、brokers.html、brokers.js、brokers.json 共六個檔案上傳 GitHub 專案根目錄，覆蓋同名檔案。
+3. 保留 data/stocks.json、update_data.py、manifest.webmanifest、.github/workflows/update-stocks.yml，不要刪除。
+4. GitHub Pages 更新後，在首頁底部點「分點」，即可開啟七組名單與警報系統。
+5. 分點名單依使用者提供圖片逐欄建立，舊稱、分點名稱及別名尚未對照最新官方代碼，請先人工核對。
+6. 本版沒有分點買賣超即時資料源，不會自動抓取券商交易。須使用合法來源，按 日期,股票代號,分點名稱,買進張數,賣出張數 匯入 CSV 紀錄，才會產生規則警報。
+7. 警報預設門檻淨買超 500 張、占成交量 5%；若未填總成交量，只檢查買超張數。警報不是隔日沖交易事實或未來價格預測。
+8. 匯入資料與監控設定保存在目前 Safari 網站的 localStorage。清除瀏覽資料或換裝置可能遺失；不要使用私密瀏覽來保存資料。
+9. 原有 Fugle API Key 不寫入本檔案。勿將金鑰上傳 GitHub。
+10. 舊版盤後行情、盤中查詢功能保留。此版新增券商名單、匯入與規則警報，尚未整合券商分點資料供應商。
