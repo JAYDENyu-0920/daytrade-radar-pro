@@ -1,7 +1,16 @@
-台股當沖雷達 Pro V0.5.1
-請保留資料夾結構，上傳 index.html、app.js、sw.js、update_data.py 和 .github/workflows/update-stocks.yml 到 GitHub 專案根目錄。
-進入 Actions > 更新台股行情 > Run workflow 手動執行，成功後應出現 data/stocks.json。
-如果 Actions 工作流程失敗，查看「擷取官方行情」步驟日誌。此版尚未經線上 API 實測，可能需要依官方欄位調整。
-排程為週一至週五台灣時間 15:45（GitHub 排程可能延遲）；不提供即時行情。
-首次部署後在 Safari 重新整理；若仍顯示舊版，清除網站資料或移除再加入主畫面。
-注意：date 欄位標示擷取日期，不代表官方驗證交易日；官方 API 若延遲可能是舊資料，交易前務必核對。
+當沖雷達 Pro V0.5.3.3 — 交易日資料來源修正（測試版）
+
+上傳至 GitHub 專案根目錄，覆蓋：
+  update_data.py
+  freshness.js
+  sw.js
+
+將 ZIP 內 .github/workflows/update-stocks.yml 上傳到 GitHub 的同名資料夾覆蓋舊檔。
+其他檔案保留；請勿刪除 data/stocks.json。
+
+上傳後進入 Actions 手動 Run workflow。檢查「擷取官方指定日期行情」的詳細日誌。
+若只有 TWSE 成功，會只更新 TWSE 並保留舊 TPEx，首頁會警告 TPEx 未驗證。
+若兩個市場都失敗，不會覆蓋行情檔，Actions 會顯示失敗。
+
+注意：官方歷史端點的實際 2026/10/28 回應無法在本地網路驗證，仍須透過 GitHub Actions 真實測試。
+這個版本沒有自動取得隔日沖券商分點排行。
