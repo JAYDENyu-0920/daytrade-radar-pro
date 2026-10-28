@@ -1,76 +1,32 @@
-(()=>{
-'use strict';
-const $=id=>document.getElementById(id),n=x=>Number(x)||0,fmt=x=>n(x).toLocaleString('zh-TW',{maximumFractionDigits:2}),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let stocks=[],timer=null,busy=false,lastQueryAt=0;
-const taipeiDate=new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-function stamp(v){
- if(v===undefined||v===null||v==='')return '未提供';
- let t=Number(v);if(Number.isFinite(t)){
-  if(t>1e17)t/=1e6;else if(t>1e14)t/=1e3;else if(t<1e11)t*=1000;
-  const d=new Date(t);return Number.isFinite(d.getTime())?taipeiDate.format(d):'無效時間';
- }
- const d=new Date(v);return Number.isFinite(d.getTime())?taipeiDate.format(d):'未能解析';
-}
-function marketState(){
- const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
- const get=t=>parts.find(x=>x.type===t)?.value;
- const wd=get('weekday'),mins=Number(get('hour'))*60+Number(get('minute'));
- return ['Sat','Sun'].includes(wd)?'非交易日（週末）':mins<540?'尚未開盤':mins>810?'已收盤': '一般交易時段（不保證報價無延遲）';
-}
-function liveStatus(message=''){
- const remaining=timer&&lastQueryAt?Math.max(0,60-Math.floor((Date.now()-lastQueryAt)/1000)):null;
- $('liveinfo').textContent=`${marketState()}｜${timer?'自動更新中，約 '+remaining+' 秒後再查詢':'自動更新已停止'}${lastQueryAt?'｜上次查詢：'+taipeiDate.format(new Date(lastQueryAt)):''}${message?'｜'+message:''}`;
-}
-setInterval(()=>{if(!$('live').hidden&&!busy)liveStatus()},1000);
-window.show=page=>['radar','live','settings','detail'].forEach(x=>$(x).hidden=x!==page);
-const score=s=>Math.max(0,Math.min(100,Math.round(Math.min(40,n(s.volume)/1500)+Math.min(35,n(s.range)*5)+Math.min(25,Math.abs(n(s.change))*4))));
-function render(){
- const sort=$('sort').value,min=n($('minvol').value);
- const list=stocks.filter(s=>s.close>=40&&s.close<=100&&s.volume>=min&&(!$('exclude').checked||!s.id.startsWith('0')));
- list.sort((a,b)=>sort==='volume'?b.volume-a.volume:sort==='change'?b.change-a.change:score(b)-score(a));
- $('stocks').innerHTML=list.length?list.slice(0,40).map(s=>`<div class="card stock" data-id="${esc(s.id)}"><div class="row"><b>${esc(s.id)} ${esc(s.name)}</b><span class="green">${score(s)} 分</span></div><p>收盤 ${fmt(s.close)} · ${esc(s.market)} · ${s.change>=0?'+':''}${fmt(s.change)}%</p><small>成交 ${fmt(s.volume)} 張 · 振幅 ${fmt(s.range)}%</small></div>`).join(''):'<div class="card">無符合條件股票</div>';
- document.querySelectorAll('.stock').forEach(e=>e.onclick=()=>detail(e.dataset.id));
-}
+(()=>{'use strict';
+const $=id=>document.getElementById(id),num=x=>Number(x)||0,fmt=x=>num(x).toLocaleString('zh-TW',{maximumFractionDigits:2}),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const W='radar-watch-v0531',B='radar-broker-daily-v0531';let stocks=[],watch=[],groups={},brokerRows=[],brokerDate='',timer=null,busy=false,lastQuery=0,lastPage='radar',liveSnapshots={};
+try{watch=JSON.parse(localStorage.getItem(W)||'[]');if(!Array.isArray(watch))watch=[]}catch{watch=[]}
+try{const d=JSON.parse(localStorage.getItem(B)||'{}');brokerRows=Array.isArray(d.rows)?d.rows:[];brokerDate=d.date||''}catch{}
+const taipei=new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+function stamp(v){if(v==null||v==='')return '未提供';let t=Number(v);if(Number.isFinite(t)){if(t>1e17)t/=1e6;else if(t>1e14)t/=1e3;else if(t<1e11)t*=1000;const d=new Date(t);return Number.isFinite(d.getTime())?taipei.format(d):'無效時間'}const d=new Date(v);return Number.isFinite(d.getTime())?taipei.format(d):'未能解析'}
+function show(page){for(const p of ['radar','watch','live','settings','detail'])$(p).hidden=p!==page;if(page!=='detail')lastPage=page}window.show=show;
+document.querySelectorAll('nav [data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));$('back').onclick=()=>show(lastPage==='detail'?'radar':lastPage);
+const score=s=>Math.max(0,Math.min(100,Math.round(Math.min(40,num(s.volume)/1500)+Math.min(35,num(s.range)*5)+Math.min(25,Math.abs(num(s.change))*4))));
+const normalize=s=>String(s||'').replace(/[\s－—–-]/g,'').replace(/金鼎/g,'').replace(/綜合/g,'');
+function cats(name){let exact=[];for(const [cat,arr] of Object.entries(groups))if(arr.some(v=>normalize(v)===normalize(name)))exact.push(cat);return exact}
+function top3(id){const rows=brokerRows.filter(r=>r.stock===id&&r.date===brokerDate);if(!rows.length)return null;const ranked=rows.map(r=>({...r,net:r.buy-r.sell,categories:cats(r.broker)})).sort((a,b)=>b.net-a.net);return ranked.slice(0,3)}
+function brokerPanel(id){const top=top3(id);if(!top)return '<div class="info"><small>券商分點：尚無經驗證的完整買賣排行資料，隔日沖警報待更新。</small></div>';
+const matched=top.filter(r=>r.categories.some(c=>c.startsWith('隔日沖')));const level=matched.length>=2?'高度警戒':matched.length===1?'隔日沖注意':'無隔日沖名單命中';return `<div class="${matched.length?'alert':'info'}"><div class="row"><b>${esc(level)}</b><small>分點交易日 ${esc(brokerDate)}</small></div><small>買超前三名（依淨買超排序）</small>${top.map((r,i)=>`<div class="row line"><div><b>${i+1}. ${esc(r.broker)}</b><br><small>${r.categories.map(c=>`<span class="tag">${esc(c)}</span>`).join('')||'未列入指定名單'}</small></div><b class="${r.net>=0?'green':'red'}">${r.net>=0?'+':''}${fmt(r.net)} 張</b></div>`).join('')}<small>名單命中不等於隔日一定賣出；僅顯示已提供資料的分點排行。</small></div>`}
+function card(s){const starred=watch.includes(s.id);const top=top3(s.id),hit=top?.filter(r=>r.categories.some(c=>c.startsWith('隔日沖'))).length||0;return `<div class="card stock"><div class="row"><b data-detail="${esc(s.id)}">${esc(s.id)} ${esc(s.name)}</b><div class="row"><span class="green">${score(s)} 分</span><button class="star" data-star="${esc(s.id)}" aria-label="自選">${starred?'★':'☆'}</button></div></div><div data-detail="${esc(s.id)}"><p>收盤 ${fmt(s.close)} · ${esc(s.market)} · ${s.change>=0?'+':''}${fmt(s.change)}%</p><small>成交 ${fmt(s.volume)} 張 · 振幅 ${fmt(s.range)}%</small>${top?`<div class="${hit?'alert':'info'}"><b class="${hit?'red':''}">${hit?'⚠ '+hit+' 個隔日沖分點命中':'買超前三名無隔日沖名單命中'}</b><small> · ${esc(brokerDate)}</small><div><small>${top.map((r,i)=>`${i+1}. ${esc(r.broker)} ${r.net>=0?'+':''}${fmt(r.net)}張`).join(' ／ ')}</small></div></div>`:'<div class="info"><small>隔日沖分點：待更新（尚無完整買超排行資料）</small></div>'}</div></div>`}
+function attach(){document.querySelectorAll('[data-star]').forEach(b=>b.onclick=()=>{const id=b.dataset.star;watch=watch.includes(id)?watch.filter(x=>x!==id):[...watch,id];localStorage.setItem(W,JSON.stringify(watch));render()});document.querySelectorAll('[data-detail]').forEach(e=>e.onclick=()=>detail(e.dataset.detail))}
+function render(){const sort=$('sort').value,min=num($('minvol').value);let list=stocks.filter(s=>s.close>=40&&s.close<=100&&s.volume>=min&&(!$('exclude').checked||!s.id.startsWith('0')));list.sort((a,b)=>sort==='volume'?b.volume-a.volume:sort==='change'?b.change-a.change:score(b)-score(a));$('stocks').innerHTML=list.length?list.slice(0,40).map(card).join(''):'<div class="card">無符合條件股票</div>';$('watchstocks').innerHTML=watch.length?watch.map(id=>{const s=stocks.find(x=>x.id===id);return s?card(s):`<div class="card row"><div><b>${esc(id)}</b><br><small>不在目前盤後資料清單，仍可在盤中頁查詢。</small></div><button data-star="${esc(id)}">移除</button></div>`}).join(''):'<div class="card">尚未加入自選股票</div>';attach();$('broker-meta').textContent=brokerDate?`分點資料交易日：${brokerDate}；僅適用已匯入完整分點排行的個股。`:'分點排行資料：尚未取得；不會產生未經證實的警報。'}
 function tick(v){return v<10?.01:v<50?.05:v<100?.1:v<500?.5:v<1000?1:5}
-function detail(id){
- const s=stocks.find(x=>x.id===id);if(!s)return;
- const entry=Math.round((s.high+tick(s.high))/tick(s.high))*tick(s.high),stop=s.low,risk=entry-stop,target=entry+2*risk,lots=risk>0?Math.floor(n($('risk').value)/(risk*1000)):0;
- $('detailbody').innerHTML=`<h2>${esc(s.id)} ${esc(s.name)}</h2><div class="card"><p>收盤 ${fmt(s.close)} · 評分 ${score(s)}</p><p>開 ${fmt(s.open)} 高 ${fmt(s.high)} 低 ${fmt(s.low)}</p><p>突破觀察 ${fmt(entry)} / 停損 ${fmt(stop)} / 2R ${fmt(target)}</p><p>風險預算 ${lots} 張（未計費稅與滑價）</p><small>盤後歷史行情推算，非盤中交易訊號。</small></div>`;
- show('detail');
-}
-async function load(){
- const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),15000);
- try{
- const r=await fetch('./data/stocks.json?t='+Date.now(),{cache:'no-store',signal:ctl.signal});if(!r.ok)throw Error('HTTP '+r.status);
- const d=await r.json();if(!Array.isArray(d.stocks)||!d.stocks.length)throw Error('空資料');
- stocks=d.stocks.filter(s=>s&&/^\d{4}$/.test(String(s.id))&&Number.isFinite(Number(s.close)));
- $('meta').textContent=`資料擷取日：${d.date||'未提供'}｜來源：${(d.sources||[]).join('、')}｜${stocks.length} 檔（盤後快照，非即時）`;
- $('status').textContent='已載入';render();
- }catch(e){$('status').textContent='載入失敗';$('error').textContent=e.message}finally{clearTimeout(t)}
-}
-async function live(){
- if(busy)return;const key=$('apikey').value.trim(),symbols=[...new Set($('symbols').value.split(/[,，\s]+/).filter(Boolean))];
- if(!key){$('liveinfo').textContent='請輸入自己的 Fugle API Key';return}
- if(!symbols.length||symbols.length>5||symbols.some(s=>!/^\d{4,6}$/.test(s))){$('liveinfo').textContent='只能輸入 1～5 個有效代號';return}
- busy=true;$('fetchlive').disabled=true;
- try{
- const result=[];
- for(const symbol of symbols){
- try{
- const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),12000);let r;
- try{r=await fetch('https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/'+symbol,{headers:{'X-API-KEY':key},cache:'no-store',signal:ctl.signal})}finally{clearTimeout(t)}
- if(!r.ok)throw Error('HTTP '+r.status);
- const q=await r.json();if(q.symbol!==symbol)throw Error('代號不符');result.push({symbol,q});
- }catch(e){result.push({symbol,error:e.message})}
- }
- $('livequotes').innerHTML=result.map(x=>x.error?`<div class="card">${esc(x.symbol)}：${esc(x.error)}</div>`:`<div class="card"><b>${esc(x.q.symbol)} ${esc(x.q.name)}</b><p>最後成交 ${fmt(x.q.closePrice)} · 漲跌 ${fmt(x.q.changePercent)}%</p><small>報價日 ${esc(x.q.date)}｜${x.q.isTrial?'試撮':'一般行情'}｜行情時間（台灣）${esc(stamp(x.q.lastUpdated))}</small></div>`).join('');
- lastQueryAt=Date.now();liveStatus(result.some(x=>x.error)?'部分查詢失敗，請檢查網路與金鑰':'已收到回應；報價時間以個股欄位為準');
- if(!timer)timer=setInterval(()=>{if(!$('live').hidden&&document.visibilityState==='visible')live()},60000);
- }finally{busy=false;$('fetchlive').disabled=false}
-}
-$('fetchlive').onclick=live;
-$('stoplive').onclick=()=>{clearInterval(timer);timer=null;liveStatus('已手動停止')};
-$('sort').onchange=render;$('apply').onclick=()=>{render();show('radar')};
-load();
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=05211',{updateViaCache:'none'}).catch(()=>{});
+function detail(id){const s=stocks.find(x=>x.id===id);if(!s)return;const t=tick(s.high),entry=Math.round((s.high+t)/t)*t,stop=s.low,risk=entry-stop,target=entry+2*risk,lots=risk>0?Math.floor(num($('risk').value)/(risk*1000)):0;const position=s.high>s.low?(s.close-s.low)/(s.high-s.low)*100:50;const strength=score(s);$('detailbody').innerHTML=`<h2>${esc(s.id)} ${esc(s.name)}</h2><div class="card"><div class="row"><b>個股盤後分析</b><span class="green">強弱 ${strength}/100</span></div><div class="grid"><div class="metric"><small>收盤價</small><b>${fmt(s.close)}</b></div><div class="metric"><small>漲跌幅</small><b>${s.change>=0?'+':''}${fmt(s.change)}%</b></div><div class="metric"><small>當日振幅</small><b>${fmt(s.range)}%</b></div><div class="metric"><small>成交量</small><b>${fmt(s.volume)} 張</b></div><div class="metric"><small>最高／最低</small><b>${fmt(s.high)} / ${fmt(s.low)}</b></div><div class="metric"><small>收盤位置</small><b>${position.toFixed(0)}%</b></div></div><div class="line"><b>交易觀察區間</b><p>突破參考 ${fmt(entry)} · 停損參考 ${fmt(stop)} · 2R 參考 ${fmt(target)}</p><small>風險預算可承受 ${lots} 張（未計費稅、滑價）。收盤位置為當日高低區間相對位置，不是預測。</small></div><div class="line"><b>量價觀察</b><p>${s.change>0?'當日收漲':s.change<0?'當日收跌':'當日平盤'}，成交 ${fmt(s.volume)} 張。缺少連續分時成交量快照，暫不判定「量增價漲」或「量增價跌」。</p></div>${brokerPanel(id)}<small>評分為啟發式排序，非獲利機率或買賣建議。</small></div>`;show('detail')}
+async function load(){const ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),16000);try{const r=await fetch('./data/stocks.json?t='+Date.now(),{cache:'no-store',signal:ctl.signal});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();if(!Array.isArray(d.stocks)||!d.stocks.length)throw Error('空資料');stocks=d.stocks.filter(s=>s&&/^\d{4}$/.test(String(s.id))&&Number.isFinite(Number(s.close)));$('meta').textContent=`盤後行情擷取日：${d.date||'未知'}｜${stocks.length} 檔｜非即時報價`;$('status').textContent='已載入';render()}catch(e){$('status').textContent='載入失敗';$('error').textContent=e.message}finally{clearTimeout(timeout)}}
+$('sort').onchange=render;$('apply').onclick=()=>{render();show('radar')};$('addwatch').onclick=()=>{const id=$('watchid').value.trim();if(!/^\d{4,6}$/.test(id)){alert('請輸入 4～6 位數股票代號');return}if(!watch.includes(id))watch.push(id);localStorage.setItem(W,JSON.stringify(watch));$('watchid').value='';render()};
+function parseCsvLine(line){let a=[],part='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(q&&line[i+1]==='"'){part+='"';i++}else q=!q}else if(c===','&&!q){a.push(part.trim());part=''}else part+=c}a.push(part.trim());return a}
+$('import').onclick=()=>{const lines=$('csv').value.split(/\r?\n/).filter(x=>x.trim());let rows=[],bad=[];for(let i=0;i<lines.length;i++){const a=parseCsvLine(lines[i]);if(['日期','date'].includes(a[0].toLowerCase()))continue;if(a.length!==5||!/^\d{4}-\d{2}-\d{2}$/.test(a[0])||!/^\d{4,6}$/.test(a[1])||!a[2]||!Number.isFinite(+a[3])||!Number.isFinite(+a[4])||+a[3]<0||+a[4]<0){bad.push(i+1);continue}rows.push({date:a[0],stock:a[1],broker:a[2],buy:+a[3],sell:+a[4]})}if(bad.length||!rows.length){$('importinfo').textContent=`匯入失敗：${bad.length?'錯誤行 '+bad.join('、'):'沒有有效資料'}`;return}const dates=[...new Set(rows.map(r=>r.date))],ids=[...new Set(rows.map(r=>r.stock))];if(dates.length!==1){$('importinfo').textContent='請一次只匯入單一交易日資料';return}if(!confirm(`確認這份資料包含 ${ids.length} 檔股票的「完整分點排行」？若只有指定名單或部分分點，無法驗證真正買超前三名。`))return;brokerRows=rows;brokerDate=dates[0];localStorage.setItem(B,JSON.stringify({date:brokerDate,rows:brokerRows}));$('importinfo').textContent=`已儲存 ${rows.length} 筆，交易日 ${brokerDate}；請自行確認資料完整性與授權。`;render()};$('clearbroker').onclick=()=>{if(confirm('清除本機分點資料？')){brokerRows=[];brokerDate='';localStorage.removeItem(B);render()}};
+function marketState(){const ps=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());const get=t=>ps.find(x=>x.type===t)?.value;const m=+get('hour')*60+ +get('minute');return ['Sat','Sun'].includes(get('weekday'))?'週末':m<540?'尚未開盤':m>810?'已收盤':'交易時段'}
+function liveInfo(msg=''){const sec=timer&&lastQuery?Math.max(0,60-Math.floor((Date.now()-lastQuery)/1000)):null;$('liveinfo').textContent=`${marketState()}｜${timer?'約 '+sec+' 秒後更新':'更新停止'}${lastQuery?'｜上次查詢 '+taipei.format(new Date(lastQuery)):''}${msg?'｜'+msg:''}`}
+setInterval(()=>{if(!$('live').hidden&&!busy)liveInfo()},1000);
+async function live(){if(busy)return;const key=$('apikey').value.trim(),symbols=[...new Set($('symbols').value.split(/[,，\s]+/).filter(Boolean))];if(!key){$('liveinfo').textContent='請輸入 Fugle API Key';return}if(!symbols.length||symbols.length>5||symbols.some(s=>!/^\d{4,6}$/.test(s))){$('liveinfo').textContent='限 1～5 個有效股票代號';return}busy=true;$('fetchlive').disabled=true;try{let results=[];for(const symbol of symbols){try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),12000);let r;try{r=await fetch('https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/'+symbol,{headers:{'X-API-KEY':key},cache:'no-store',signal:ctl.signal})}finally{clearTimeout(t)}if(!r.ok)throw Error('HTTP '+r.status);const q=await r.json();if(q.symbol!==symbol)throw Error('代號不符');const prev=liveSnapshots[symbol],volume=num(q.total?.tradeVolume),price=num(q.closePrice);let delta='尚無連續快照';if(prev&&prev.date===q.date&&Number.isFinite(volume)&&volume>=prev.volume){delta=`本次較上次：累計量 +${fmt(volume-prev.volume)}（API 原始單位）／價格 ${price>prev.price?'上漲':price<prev.price?'下跌':'持平'}`}liveSnapshots[symbol]={date:q.date,volume,price};results.push({symbol,q,delta})}catch(e){results.push({symbol,error:e.message})}}$('livequotes').innerHTML=results.map(x=>x.error?`<div class="card">${esc(x.symbol)}：${esc(x.error)}</div>`:`<div class="card"><b>${esc(x.q.symbol)} ${esc(x.q.name)}</b><p>最後成交 ${fmt(x.q.closePrice)} · 漲跌 ${fmt(x.q.changePercent)}%</p><small>最高 ${fmt(x.q.highPrice)} / 最低 ${fmt(x.q.lowPrice)} · 累計量 ${fmt(x.q.total?.tradeVolume)}（API 原始單位）</small><p><small>${esc(x.delta)}</small></p><small>報價日 ${esc(x.q.date)}｜行情時間 ${esc(stamp(x.q.lastUpdated))}</small></div>`).join('');lastQuery=Date.now();liveInfo(results.some(x=>x.error)?'部分查詢失敗':'已收到回應');if(!timer)timer=setInterval(()=>{if(!$('live').hidden&&document.visibilityState==='visible')live()},60000)}finally{busy=false;$('fetchlive').disabled=false}}
+$('fetchlive').onclick=live;$('stoplive').onclick=()=>{clearInterval(timer);timer=null;liveInfo('已停止')};
+fetch('./brokers.json?t='+Date.now(),{cache:'no-store'}).then(r=>r.json()).then(d=>{groups=d.categories||{};$('groups').innerHTML=Object.entries(groups).map(([k,v])=>`<details><summary>${esc(k)} · ${v.length} 筆</summary><p>${v.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</p></details>`).join('');render()}).catch(()=>{$('groups').textContent='名單載入失敗';render()});
+load();if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=0531',{updateViaCache:'none'}).catch(()=>{});
 })();
