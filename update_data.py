@@ -1,8 +1,9 @@
-"""V0.5.3.3 — dated official daily reports, independent market validation.
+"""V0.5.3.4 — dated official daily reports, independent market validation.
 Never label undated OpenAPI snapshots with the fetch date.
 """
 import datetime as dt
 import json
+import os
 import pathlib
 import re
 import sys
@@ -136,6 +137,28 @@ def retrieve(market, day):
 
 def main():
     now = dt.datetime.now(TZ)
+    test_date = os.environ.get('RADAR_TEST_DATE', '').strip()
+    if test_date:
+        try:
+            requested = dt.date.fromisoformat(test_date)
+        except ValueError:
+            raise RuntimeError('測試日期必須是 YYYY-MM-DD，例如 2026-10-28')
+        if requested > now.date() or requested.weekday() >= 5:
+            raise RuntimeError('測試日期不可為未來日期或週末')
+        day = requested.isoformat()
+        print(f'🧪 歷史行情唯讀測試：{day}；不會寫入 data/stocks.json', flush=True)
+        results = {}
+        for market in ('TWSE', 'TPEx'):
+            try:
+                rows = retrieve(market, day)
+                results[market] = {'ok': True, 'count': len(rows), 'examples': [s for s in rows if s['id'] in ('1802', '4526', '2330')]}
+            except Exception as exc:
+                results[market] = {'ok': False, 'error': str(exc)}
+        print('測試結果：' + json.dumps(results, ensure_ascii=False), flush=True)
+        if not all(v['ok'] for v in results.values()):
+            raise RuntimeError('至少一個市場驗證失敗；以上為實際錯誤，不會修改正式行情')
+        print('🧪 歷史行情測試通過；正式行情檔案保持不變', flush=True)
+        return
     day = now.date().isoformat()
     if now.weekday() >= 5 or now.hour < 16: raise RuntimeError('只在台灣交易日 16:00 後嘗試發布當日行情')
     target = ROOT / 'data' / 'stocks.json'
