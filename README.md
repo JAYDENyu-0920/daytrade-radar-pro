@@ -1,22 +1,13 @@
-# 台股當沖雷達 Pro V0.2 — iOS PWA
+# 台股當沖雷達 Pro V0.5
 
-這是可運行的**離線優先前端原型**，沒有連接即時股價、當沖資格或交易所 API。示範股票完全虛構，策略參考價不是交易建議。
+## 部署
+將本資料夾內的檔案與 `.github/workflows/update.yml` 上傳到 GitHub 儲存庫根目錄。注意 GitHub 網頁上傳工具可能不保留隱藏資料夾 `.github`；建議使用 GitHub 網頁 Create new file 直接建立 `.github/workflows/update.yml`，或使用 GitHub Desktop / git push。
 
-## 使用方法
-1. 將整個資料夾部署至 GitHub Pages（或其他 HTTPS 靜態主機），不要只上傳 index.html。
-2. 用 iPhone Safari 開啟 HTTPS 網址，點選「分享」→「加入主畫面」。
-3. 從主畫面開啟，於「資料設定」載入示範資料或匯入自己的 CSV。
-4. Windows 可透過 HTTPS 或 localhost 使用；直接雙擊 index.html 可預覽基本功能，但不會註冊 Service Worker。
+Settings > Pages > Deploy from a branch > main > /(root)。
 
-## CSV 格式
-`code,name,close,high,low,volume,prev`，價格單位元，volume 單位張，必須為同一天的行情。支援含引號的 CSV 欄位。
+Actions > 更新台股行情 > Run workflow，確認成功且 `data/stocks.json` 產生後，重新整理網站。排程為 UTC 07:20，即台灣 15:20，僅平日，並非盤中即時行情。GitHub Actions 排程可能延遲或暫停，請檢查日期。
 
-## 限制
-- 僅支援日行情匯入與簡單量價評分，沒有即時行情、VWAP、RSI、分鐘 K、回測或推播。
-- 交易日誌損益未扣除手續費、證交稅及滑價。
-- 教學突破價採固定 0.05 元示意，未依台股各價位跳動單位或個股當沖資格校驗，不可用於下單。
-- 本機資料儲存在 localStorage，請定期匯出備份。
-- 目前不需要伺服器或 API 金鑰。
+**注意**：官方 API 欄位可能變動，TPEx 端點或雲端連線可能受限制。程式刻意在資料源失敗或日期不一致時停止，避免顯示不完整或假資料。請先確認首次 Action 成功，否則不能承諾隔日可用。
 
-## 後續架構
-前端 PWA → HTTPS API (FastAPI) → 合規行情來源／PostgreSQL → 排程分析與通知。資料源與授權確認後才能開啟盤中訊號。
+## 使用限制
+本版只提供收盤資料盤前觀察。高點突破價、停損、2R 目標為條件式參考，未經回測，不代表預期獲利。未確認當沖資格、借券、處置及即時成交量，不能用於自動下單。股票價格 40–100 元，成交量單位預設 API 成交股數轉張。開盤跳空、除權息等情況需人工確認。

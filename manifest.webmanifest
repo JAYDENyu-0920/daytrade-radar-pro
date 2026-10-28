@@ -1,1 +1,1 @@
-{"name":"台股當沖雷達 Pro","short_name":"當沖雷達","description":"iPhone 優先的台股當沖分析與交易日誌","start_url":"./index.html","scope":"./","display":"standalone","background_color":"#0b1220","theme_color":"#0b1220","lang":"zh-TW","icons":[{"src":"icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{"name":"台股當沖雷達 Pro","short_name":"當沖雷達","start_url":"./","display":"standalone","background_color":"#0b1120","theme_color":"#0b1120","lang":"zh-Hant"}
