@@ -3,6 +3,11 @@ name: 更新台股行情
 
 on:
   workflow_dispatch:
+    inputs:
+      test_date:
+        description: '歷史交易日測試（YYYY-MM-DD，留空則正常更新）'
+        required: false
+        type: string
   schedule:
     - cron: '20 8,9,10 * * 1-5'
 
