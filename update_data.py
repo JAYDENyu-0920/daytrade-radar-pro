@@ -128,7 +128,7 @@ def parse(market, rows):
         volume = number(
             pick(
                 r, "TradeVolume", "TradingVolume",
-                "成交股數", "成交量"
+"TradingShares", "成交股數", "成交量"
             )
         )
 
