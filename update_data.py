@@ -138,7 +138,7 @@ def parse_stocks(rows, market, day):
         if any(v is None for v in (close, op, high, low, volume)):
             rejected['缺少數字'] += 1
             continue
-        if not (40 <= close <= 100 and 0 < low <= op <= high and low <= close <= high and volume >= 0):
+        if not (0 < close <= 300 and 0 < low <= op <= high and low <= close <= high and volume >= 0):
             rejected['價格範圍'] += 1
             continue
         raw_change = str(get(row, '漲跌價差', '漲跌', 'Change') or '')
